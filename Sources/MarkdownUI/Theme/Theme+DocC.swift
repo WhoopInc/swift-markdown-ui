@@ -114,6 +114,10 @@ extension Theme {
         .frame(maxWidth: .infinity)
         .markdownMargin(top: .em(1.6), bottom: .em(1.6))
     }
+    .list { configuration in
+      configuration.label
+        .markdownMargin(top: .em(0.8), bottom: .zero)
+    }
     .listItem { configuration in
       configuration.label
         .markdownMargin(top: .em(0.8))

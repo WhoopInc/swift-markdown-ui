@@ -99,6 +99,10 @@ extension Theme {
         .fixedSize(horizontal: false, vertical: true)
         .markdownMargin(top: .zero, bottom: .em(1))
     }
+    .list { configuration in
+      configuration.label
+        .markdownMargin(top: .zero, bottom: .em(1))
+    }
     .tableCell { configuration in
       configuration.label
         .markdownTextStyle {

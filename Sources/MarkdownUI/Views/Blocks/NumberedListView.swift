@@ -32,8 +32,8 @@ struct NumberedListView: View {
     )
   }
 
-  private var label: some View {
-    ListItemSequence(
+  @ViewBuilder private var label: some View {
+    let sequence = ListItemSequence(
       items: self.items,
       start: self.start,
       markerStyle: self.numberedListMarker,
@@ -41,8 +41,13 @@ struct NumberedListView: View {
     )
     .environment(\.listLevel, self.listLevel + 1)
     .environment(\.tightSpacingEnabled, self.isTight)
-    .onColumnWidthChange { columnWidths in
-      self.markerWidth = columnWidths[0]
+
+    if #available(iOS 16.0, macOS 13.0, tvOS 16.0, watchOS 9.0, *) {
+      sequence
+    } else {
+      sequence.onColumnWidthChange { columnWidths in
+        self.markerWidth = columnWidths[0]
+      }
     }
   }
 }

@@ -36,26 +36,26 @@ extension Theme {
         configuration.label
           .relativePadding(.bottom, length: .em(0.3))
           .relativeLineSpacing(.em(0.125))
-          .markdownMargin(top: 24, bottom: 16)
           .markdownTextStyle {
             FontWeight(.semibold)
             FontSize(.em(2))
           }
         Divider().overlay(Color.divider)
       }
+      .markdownMargin(top: 24, bottom: 16)
     }
     .heading2 { configuration in
       VStack(alignment: .leading, spacing: 0) {
         configuration.label
           .relativePadding(.bottom, length: .em(0.3))
           .relativeLineSpacing(.em(0.125))
-          .markdownMargin(top: 24, bottom: 16)
           .markdownTextStyle {
             FontWeight(.semibold)
             FontSize(.em(1.5))
           }
         Divider().overlay(Color.divider)
       }
+      .markdownMargin(top: 24, bottom: 16)
     }
     .heading3 { configuration in
       configuration.label
@@ -124,6 +124,10 @@ extension Theme {
       .background(Color.secondaryBackground)
       .clipShape(RoundedRectangle(cornerRadius: 6))
       .markdownMargin(top: 0, bottom: 16)
+    }
+    .list { configuration in
+      configuration.label
+        .markdownMargin(top: 0, bottom: 16)
     }
     .listItem { configuration in
       configuration.label
