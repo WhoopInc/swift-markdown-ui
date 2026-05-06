@@ -77,7 +77,10 @@ extension Theme {
       configuration.label
         .fixedSize(horizontal: false, vertical: true)
         .relativeLineSpacing(.em(0.235295))
-        .markdownMargin(top: .em(0.8), bottom: .zero)
+        .markdownMargin(
+          top: configuration.content.isImageOnlyParagraph ? .em(1.6) : .em(0.8),
+          bottom: configuration.content.isImageOnlyParagraph ? .em(1.6) : .zero
+        )
     }
     .blockquote { configuration in
       configuration.label
@@ -131,6 +134,9 @@ extension Theme {
       configuration.label
         .fixedSize(horizontal: false, vertical: true)
         .markdownTableBorderStyle(.init(.horizontalBorders, color: .grid))
+        .markdownTableLayoutWidthBehavior(
+          .balancedFillAvailable(maxWidthFraction: 0.906, widthAdjustment: 0.5)
+        )
         .markdownMargin(top: .em(1.6), bottom: .zero)
     }
     .tableCell { configuration in
@@ -149,6 +155,42 @@ extension Theme {
         .overlay(Color.grid)
         .markdownMargin(top: .em(2.35), bottom: .em(2.35))
     }
+}
+
+extension MarkdownContent {
+  fileprivate var isImageOnlyParagraph: Bool {
+    guard self.blocks.count == 1, case .paragraph(let inlines) = self.blocks[0] else {
+      return false
+    }
+
+    return inlines.contains(where: \.isImage) && inlines.allSatisfy(\.isImageFlowContent)
+  }
+}
+
+extension InlineNode {
+  fileprivate var isImage: Bool {
+    switch self {
+    case .image:
+      return true
+    case .link(_, let children):
+      return children.count == 1 && children[0].isImage
+    default:
+      return false
+    }
+  }
+
+  fileprivate var isImageFlowContent: Bool {
+    switch self {
+    case .text(let text):
+      return text.isEmpty
+    case .softBreak, .lineBreak, .image:
+      return true
+    case .link(_, let children):
+      return children.count == 1 && children[0].isImage
+    default:
+      return false
+    }
+  }
 }
 
 extension Shape where Self == RoundedRectangle {

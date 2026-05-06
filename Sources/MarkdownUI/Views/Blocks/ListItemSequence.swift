@@ -9,41 +9,65 @@ struct ListItemSequence: View {
   private let start: Int
   private let markerStyle: BlockStyle<ListMarkerConfiguration>
   private let markerWidth: CGFloat?
+  private let alignsMarkers: Bool
+  private let multilineMarkerVerticalOffset: CGFloat
 
   init(
     items: [RawListItem],
     start: Int = 1,
     markerStyle: BlockStyle<ListMarkerConfiguration>,
-    markerWidth: CGFloat? = nil
+    markerWidth: CGFloat? = nil,
+    alignsMarkers: Bool = true,
+    multilineMarkerVerticalOffset: CGFloat = 0
   ) {
     self.items = items
     self.start = start
     self.markerStyle = markerStyle
     self.markerWidth = markerWidth
+    self.alignsMarkers = alignsMarkers
+    self.multilineMarkerVerticalOffset = multilineMarkerVerticalOffset
   }
 
   var body: some View {
-    if #available(iOS 16.0, macOS 13.0, tvOS 16.0, watchOS 9.0, *) {
-      MarkdownListItemSequenceLayout(tightSpacingEnabled: self.tightSpacingEnabled) {
-        ForEach(self.items.indexed(), id: \.self) { item in
-          self.listItem.makeBody(
-            configuration: .init(
-              label: .init(
-                MarkdownListItemLayout {
-                  self.markerStyle
-                    .makeBody(
-                      configuration: .init(
-                        listLevel: self.listLevel,
-                        itemNumber: self.start + item.index
+    if self.alignsMarkers,
+      #available(iOS 16.0, macOS 13.0, tvOS 16.0, watchOS 9.0, *)
+    {
+      TextStyleAttributesReader { attributes in
+        let looseListItemSpacing =
+          attributes.fontProperties?.scaledSize ?? FontProperties.defaultSize
+
+        MarkdownListItemSequenceLayout(
+          tightSpacingEnabled: self.tightSpacingEnabled,
+          looseListItemSpacing: looseListItemSpacing
+        ) {
+          ForEach(self.items.indexed(), id: \.self) { item in
+            self.listItem.makeBody(
+              configuration: .init(
+                label: .init(
+                  MarkdownListItemLayout {
+                    let marker = self.markerStyle
+                      .makeBody(
+                        configuration: .init(
+                          listLevel: self.listLevel,
+                          itemNumber: self.start + item.index
+                        )
                       )
-                    )
-                    .textStyleFont()
-                  BlockSequence(item.value.children)
-                }
-              ),
-              content: .init(blocks: item.value.children)
+                      .textStyleFont()
+                    if item.value.children.count == 1 {
+                      marker.layoutValue(
+                        key: ListMarkerMultilineVerticalOffsetLayoutValueKey.self,
+                        value: self.multilineMarkerVerticalOffset
+                      )
+                    } else {
+                      marker
+                    }
+                    BlockSequence(item.value.children)
+                  }
+                ),
+                content: .init(blocks: item.value.children)
+              )
             )
-          )
+          }
         }
       }
       .labelStyle(.titleAndIcon)
@@ -68,6 +92,7 @@ struct ListItemSequence: View {
 @available(iOS 16.0, macOS 13.0, tvOS 16.0, watchOS 9.0, *)
 private struct MarkdownListItemSequenceLayout: Layout {
   let tightSpacingEnabled: Bool
+  let looseListItemSpacing: CGFloat
 
   func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
     self.computeLayout(proposal: proposal, subviews: subviews).size
@@ -159,13 +184,17 @@ extension MarkdownListItemSequenceLayout {
       return spacing
     }
 
+    if !self.tightSpacingEnabled {
+      return self.looseListItemSpacing
+    }
+
     return subviews[predecessorIndex].spacing.distance(
       to: subviews[index].spacing, along: .vertical)
   }
 }
 
 @available(iOS 16.0, macOS 13.0, tvOS 16.0, watchOS 9.0, *)
-private struct MarkdownListItemLayout: Layout {
+struct MarkdownListItemLayout: Layout {
   func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
     self.computeLayout(proposal: proposal, subviews: subviews).size
   }
@@ -226,8 +255,13 @@ extension MarkdownListItemLayout {
     let contentWidth = proposal.width.map { max(0, $0 - markerDimensions.width - spacing) }
     let contentDimensions = content.dimensions(in: .init(width: contentWidth, height: nil))
     let markerAlignment = markerDimensions[.centerOfFirstLine]
+    let markerAlignmentOffset = marker[ListMarkerAlignmentOffsetLayoutValueKey.self]
     let contentAlignment = contentDimensions[.centerOfFirstLine]
-    let alignment = max(markerAlignment, contentAlignment)
+    let alignment = max(markerAlignment + markerAlignmentOffset, contentAlignment)
+    let contentWraps = contentDimensions.height > markerDimensions.height * 1.5
+    let markerVerticalOffset =
+      marker[ListMarkerVerticalOffsetLayoutValueKey.self]
+      + (contentWraps ? marker[ListMarkerMultilineVerticalOffsetLayoutValueKey.self] : 0)
     let height = max(
       markerDimensions.height + alignment - markerAlignment,
       contentDimensions.height + alignment - contentAlignment
@@ -237,7 +271,7 @@ extension MarkdownListItemLayout {
       items: [
         .init(
           index: subviews.startIndex,
-          origin: .init(x: 0, y: alignment - markerAlignment),
+          origin: .init(x: 0, y: alignment - markerAlignment + markerVerticalOffset),
           size: .init(width: markerDimensions.width, height: markerDimensions.height)
         ),
         .init(
@@ -276,4 +310,19 @@ extension HorizontalAlignment {
   }
 
   fileprivate static let markdownListMarkerTrailing = Self(MarkdownListMarkerTrailing.self)
+}
+
+@available(iOS 16.0, macOS 13.0, tvOS 16.0, watchOS 9.0, *)
+enum ListMarkerVerticalOffsetLayoutValueKey: LayoutValueKey {
+  static let defaultValue: CGFloat = 0
+}
+
+@available(iOS 16.0, macOS 13.0, tvOS 16.0, watchOS 9.0, *)
+enum ListMarkerAlignmentOffsetLayoutValueKey: LayoutValueKey {
+  static let defaultValue: CGFloat = 0
+}
+
+@available(iOS 16.0, macOS 13.0, tvOS 16.0, watchOS 9.0, *)
+enum ListMarkerMultilineVerticalOffsetLayoutValueKey: LayoutValueKey {
+  static let defaultValue: CGFloat = 0
 }

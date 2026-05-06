@@ -78,6 +78,7 @@ private struct MarkdownBlockSequenceLayout: Layout {
     in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()
   ) {
     let layout = self.computeLayout(proposal: proposal, subviews: subviews)
+    let childProposal = ProposedViewSize(width: proposal.width, height: nil)
     var y = bounds.minY
 
     for item in layout.items {
@@ -89,7 +90,7 @@ private struct MarkdownBlockSequenceLayout: Layout {
           y: y
         ),
         anchor: .topLeading,
-        proposal: .init(item.size)
+        proposal: childProposal
       )
       y += item.size.height
     }
@@ -121,6 +122,7 @@ private struct MarkdownBlockSequenceLayout: Layout {
       return nil
     }
   }
+
 }
 
 @available(iOS 16.0, macOS 13.0, tvOS 16.0, watchOS 9.0, *)

@@ -3,6 +3,7 @@ import SwiftUI
 @available(iOS 16.0, macOS 13.0, tvOS 16.0, watchOS 9.0, *)
 struct TableView: View {
   @Environment(\.theme.table) private var table
+  @Environment(\.tableBorderStyle.strokeStyle.lineWidth) private var layoutBorderWidth
 
   private let columnAlignments: [RawTableColumnAlignment]
   private let rows: [RawTableRow]
@@ -24,6 +25,7 @@ struct TableView: View {
   private var label: some View {
     MarkdownTableLayoutView(
       columnAlignments: self.columnAlignments,
+      layoutBorderWidth: self.layoutBorderWidth,
       rows: self.rows
     )
   }
@@ -33,8 +35,11 @@ struct TableView: View {
 private struct MarkdownTableLayoutView: View {
   @Environment(\.tableBackgroundStyle) private var tableBackgroundStyle
   @Environment(\.tableBorderStyle) private var tableBorderStyle
+  @Environment(\.tableLayoutWidthBehavior) private var tableLayoutWidthBehavior
+  @Environment(\.displayScale) private var displayScale
 
   let columnAlignments: [RawTableColumnAlignment]
+  let layoutBorderWidth: CGFloat
   let rows: [RawTableRow]
 
   var body: some View {
@@ -42,7 +47,10 @@ private struct MarkdownTableLayoutView: View {
       rowCount: self.rowCount,
       columnCount: self.columnCount,
       columnAlignments: self.columnAlignments,
-      borderWidth: self.tableBorderStyle.strokeStyle.lineWidth,
+      widthBehavior: self.tableLayoutWidthBehavior,
+      layoutBorderWidth: self.layoutBorderWidth,
+      decorationBorderWidth: self.tableBorderStyle.strokeStyle.lineWidth,
+      displayScale: self.displayScale,
       visibleBorders: self.tableBorderStyle.visibleBorders
     ) {
       ForEach(0..<self.rowCount, id: \.self) { row in
@@ -83,7 +91,10 @@ private struct MarkdownTableLayout: Layout {
   let rowCount: Int
   let columnCount: Int
   let columnAlignments: [RawTableColumnAlignment]
-  let borderWidth: CGFloat
+  let widthBehavior: TableLayoutWidthBehavior
+  let layoutBorderWidth: CGFloat
+  let decorationBorderWidth: CGFloat
+  let displayScale: CGFloat
   let visibleBorders: TableBorderSelector
 
   func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
@@ -93,7 +104,11 @@ private struct MarkdownTableLayout: Layout {
   func placeSubviews(
     in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()
   ) {
-    let layout = self.computeLayout(proposal: proposal, subviews: subviews)
+    let layout = self.computeLayout(
+      proposal: proposal,
+      subviews: subviews,
+      fixedTableWidth: bounds.width
+    )
 
     for cell in layout.backgrounds {
       subviews[cell.index].place(
@@ -135,7 +150,11 @@ extension MarkdownTableLayout {
     var tableBounds: TableBounds
   }
 
-  private func computeLayout(proposal: ProposedViewSize, subviews: Subviews) -> ComputedLayout {
+  private func computeLayout(
+    proposal: ProposedViewSize,
+    subviews: Subviews,
+    fixedTableWidth: CGFloat? = nil
+  ) -> ComputedLayout {
     guard self.rowCount > 0, self.columnCount > 0 else {
       return .init(tableBounds: .init(bounds: .zero, rows: [], columns: []))
     }
@@ -150,7 +169,8 @@ extension MarkdownTableLayout {
     let columnWidths = self.columnWidths(
       proposal: proposal,
       cellSizes: cellSizes,
-      minimumCellSizes: minimumCellSizes
+      minimumCellSizes: minimumCellSizes,
+      fixedTableWidth: fixedTableWidth
     )
     let measuredCellSizes = self.cellSizes(
       columnWidths: columnWidths,
@@ -158,8 +178,12 @@ extension MarkdownTableLayout {
       cellStartIndex: cellStartIndex
     )
     let rowHeights = self.rowHeights(cellSizes: measuredCellSizes)
-    let tableBounds = self.tableBounds(columnWidths: columnWidths, rowHeights: rowHeights)
-    let borderRects = self.visibleBorders.rectangles(tableBounds, self.borderWidth)
+    let tableBounds = self.tableBounds(
+      columnWidths: columnWidths,
+      rowHeights: rowHeights,
+      snapsWidthToDisplayScale: fixedTableWidth == nil
+    )
+    let borderRects = self.visibleBorders.rectangles(tableBounds, self.decorationBorderWidth)
     var layout = ComputedLayout(tableBounds: tableBounds)
 
     for row in 0..<self.rowCount {
@@ -228,30 +252,105 @@ extension MarkdownTableLayout {
   private func columnWidths(
     proposal: ProposedViewSize,
     cellSizes: [[CGSize]],
-    minimumCellSizes: [[CGSize]]
+    minimumCellSizes: [[CGSize]],
+    fixedTableWidth: CGFloat?
   ) -> [CGFloat] {
-    var widths = Array(repeating: CGFloat(0), count: self.columnCount)
-    var minimumWidths = Array(repeating: CGFloat(0), count: self.columnCount)
+    let naturalWidths = self.naturalColumnWidths(cellSizes: cellSizes)
+    let readableWidths = self.readableColumnWidths(cellSizes: cellSizes)
+    let minimumWidths = self.naturalColumnWidths(cellSizes: minimumCellSizes)
+    let preferredWidths: [CGFloat]
+
+    switch self.widthBehavior {
+    case .compact:
+      preferredWidths = readableWidths
+    case .fillAvailable, .balancedFillAvailable:
+      preferredWidths = naturalWidths
+    }
+
+    let proposedWidth = fixedTableWidth ?? proposal.width
+    guard let proposedWidth else {
+      return preferredWidths
+    }
+
+    let availableWidth =
+      proposedWidth - 2 * self.layoutBorderWidth - CGFloat(max(0, self.columnCount - 1))
+      * self.layoutBorderWidth
+    guard availableWidth > 0 else {
+      return preferredWidths
+    }
+
+    switch self.widthBehavior {
+    case .compact:
+      let compactWidth =
+        fixedTableWidth == nil && availableWidth >= 300
+        ? min(availableWidth, max(readableWidths.reduce(0, +), availableWidth * 0.72))
+        : availableWidth
+      return self.balancedColumnWidths(
+        readableWidths: readableWidths,
+        naturalWidths: naturalWidths,
+        minimumWidths: minimumWidths,
+        availableWidth: compactWidth
+      )
+    case .fillAvailable:
+      if self.columnCount > 2 {
+        if readableWidths.reduce(0, +) <= availableWidth {
+          return readableWidths
+        }
+
+        return self.balancedColumnWidths(
+          readableWidths: readableWidths,
+          naturalWidths: naturalWidths,
+          minimumWidths: minimumWidths,
+          availableWidth: availableWidth
+        )
+      }
+
+      if self.hasDominantColumn(naturalWidths, availableWidth: availableWidth) {
+        return self.balancedColumnWidths(
+          readableWidths: readableWidths,
+          naturalWidths: naturalWidths,
+          minimumWidths: minimumWidths,
+          availableWidth: availableWidth
+        )
+      }
+
+      return self.candidateColumnWidths(
+        cellSizes: cellSizes,
+        naturalWidths: naturalWidths,
+        minimumWidths: minimumWidths,
+        availableWidth: availableWidth
+      )
+    case .balancedFillAvailable(let maxWidthFraction, let widthAdjustment):
+      let balancedWidth =
+        fixedTableWidth == nil
+        ? availableWidth * maxWidthFraction + widthAdjustment
+        : availableWidth
+      return self.balancedColumnWidths(
+        readableWidths: readableWidths,
+        naturalWidths: naturalWidths,
+        minimumWidths: minimumWidths,
+        availableWidth: balancedWidth
+      )
+    }
+  }
+
+  private func candidateColumnWidths(
+    cellSizes: [[CGSize]],
+    naturalWidths: [CGFloat],
+    minimumWidths: [CGFloat],
+    availableWidth: CGFloat
+  ) -> [CGFloat] {
+    var widths = naturalWidths
     var widthCandidates = Array(repeating: [CGFloat](), count: self.columnCount)
 
     for column in 0..<self.columnCount {
-      let naturalWidths = cellSizes.map { $0[column].width }
-      widths[column] = naturalWidths.max() ?? 0
-      minimumWidths[column] = minimumCellSizes.map { $0[column].width }.max() ?? 0
       widthCandidates[column] = self.widthCandidates(
-        naturalWidths: naturalWidths,
+        naturalWidths: cellSizes.map { $0[column].width },
         minimumWidth: minimumWidths[column]
       )
     }
 
-    guard let proposedWidth = proposal.width else {
-      return widths
-    }
-
-    let availableWidth =
-      proposedWidth - 2 * self.borderWidth - CGFloat(max(0, self.columnCount - 1))
-      * self.borderWidth
-    guard widths.reduce(0, +) > availableWidth, availableWidth > 0 else {
+    guard widths.reduce(0, +) > availableWidth else {
       return widths
     }
 
@@ -274,20 +373,52 @@ extension MarkdownTableLayout {
       }
 
       candidateIndices[shrinkableColumn] += 1
-      widths[shrinkableColumn] =
-        widthCandidates[shrinkableColumn][
-          candidateIndices[shrinkableColumn]
-        ]
+      widths[shrinkableColumn] = widthCandidates[shrinkableColumn][
+        candidateIndices[shrinkableColumn]
+      ]
     }
 
-    var remainingOverflow = widths.reduce(0, +) - availableWidth
-    for column in widths.indices.reversed() where remainingOverflow > 0 {
-      let shrink = min(remainingOverflow, max(0, widths[column] - minimumWidths[column]))
-      widths[column] -= shrink
-      remainingOverflow -= shrink
+    return self.fittingColumnWidths(
+      widths,
+      minimumWidths: minimumWidths,
+      availableWidth: availableWidth
+    )
+  }
+
+  private func balancedColumnWidths(
+    readableWidths: [CGFloat],
+    naturalWidths: [CGFloat],
+    minimumWidths: [CGFloat],
+    availableWidth: CGFloat
+  ) -> [CGFloat] {
+    var widths = readableWidths
+    let remainingWidth = availableWidth - widths.reduce(0, +)
+
+    if remainingWidth > 0 {
+      let demand = zip(naturalWidths, readableWidths).map { max(0, $0 - $1) }
+      let totalDemand = demand.reduce(0, +)
+
+      if totalDemand > 0 {
+        let readableWidth = readableWidths.reduce(0, +)
+        let balancesReadableColumns = readableWidth > 0 && demand.allSatisfy { $0 > 0 }
+
+        for column in widths.indices {
+          let demandShare = demand[column] / totalDemand
+          let readableShare = readableWidth > 0 ? readableWidths[column] / readableWidth : 0
+          let share =
+            balancesReadableColumns
+            ? demandShare * 0.84 + readableShare * 0.16
+            : demandShare
+          widths[column] += min(demand[column], remainingWidth * share)
+        }
+      }
     }
 
-    return widths
+    return self.fittingColumnWidths(
+      widths,
+      minimumWidths: minimumWidths,
+      availableWidth: availableWidth
+    )
   }
 
   private func widthCandidates(naturalWidths: [CGFloat], minimumWidth: CGFloat) -> [CGFloat] {
@@ -304,36 +435,99 @@ extension MarkdownTableLayout {
     return candidates.isEmpty ? [minimumWidth] : candidates
   }
 
+  private func hasDominantColumn(_ widths: [CGFloat], availableWidth: CGFloat) -> Bool {
+    widths.contains { width in
+      width > availableWidth * 1.2
+    }
+  }
+
+  private func naturalColumnWidths(cellSizes: [[CGSize]]) -> [CGFloat] {
+    (0..<self.columnCount).map { column in
+      cellSizes.map { $0[column].width }.max() ?? 0
+    }
+  }
+
+  private func readableColumnWidths(cellSizes: [[CGSize]]) -> [CGFloat] {
+    guard let header = cellSizes.first else {
+      return Array(repeating: 0, count: self.columnCount)
+    }
+
+    return (0..<self.columnCount).map { column in
+      header[column].width
+    }
+  }
+
+  private func fittingColumnWidths(
+    _ widths: [CGFloat],
+    minimumWidths: [CGFloat],
+    availableWidth: CGFloat
+  ) -> [CGFloat] {
+    let totalWidth = widths.reduce(0, +)
+    guard totalWidth > availableWidth else {
+      return widths
+    }
+
+    let overflow = totalWidth - availableWidth
+    let shrinkCapacity = zip(widths, minimumWidths).map { max(0, $0 - $1) }
+    let totalShrinkCapacity = shrinkCapacity.reduce(0, +)
+
+    guard totalShrinkCapacity > 0 else {
+      return widths
+    }
+
+    return widths.indices.map { column in
+      widths[column] - min(
+        shrinkCapacity[column],
+        overflow * shrinkCapacity[column] / totalShrinkCapacity
+      )
+    }
+  }
+
   private func rowHeights(cellSizes: [[CGSize]]) -> [CGFloat] {
     cellSizes.map { row in
       row.map(\.height).max() ?? 0
     }
   }
 
-  private func tableBounds(columnWidths: [CGFloat], rowHeights: [CGFloat]) -> TableBounds {
-    var minX = self.borderWidth
+  private func tableBounds(
+    columnWidths: [CGFloat],
+    rowHeights: [CGFloat],
+    snapsWidthToDisplayScale: Bool
+  ) -> TableBounds {
+    var minX = self.layoutBorderWidth
     let columns = columnWidths.map { width -> (minX: CGFloat, width: CGFloat) in
-      defer { minX += width + self.borderWidth }
+      defer { minX += width + self.layoutBorderWidth }
       return (minX: minX, width: width)
     }
 
-    var minY = self.borderWidth
+    var minY = self.layoutBorderWidth
     let rows = rowHeights.map { height -> (minY: CGFloat, height: CGFloat) in
-      defer { minY += height + self.borderWidth }
+      defer { minY += height + self.layoutBorderWidth }
       return (minY: minY, height: height)
     }
+
+    let width = columns.last.map { $0.minX + $0.width + self.layoutBorderWidth } ?? 0
+    let height = rows.last.map { $0.minY + $0.height + self.layoutBorderWidth } ?? 0
 
     return .init(
       bounds: .init(
         origin: .zero,
         size: .init(
-          width: columns.last.map { $0.minX + $0.width + self.borderWidth } ?? 0,
-          height: rows.last.map { $0.minY + $0.height + self.borderWidth } ?? 0
+          width: snapsWidthToDisplayScale ? self.snappedToDisplayScale(width) : width,
+          height: height
         )
       ),
       rows: rows,
       columns: columns
     )
+  }
+
+  private func snappedToDisplayScale(_ value: CGFloat) -> CGFloat {
+    guard self.displayScale > 0 else {
+      return value
+    }
+
+    return (value * self.displayScale).rounded() / self.displayScale
   }
 
   private func cellBounds(cellSize: CGSize, in bounds: CGRect, column: Int) -> CGRect {
@@ -369,4 +563,27 @@ extension MarkdownTableLayout {
   private func borderSubviewCount(subviews: Subviews, borderStartIndex: Int) -> Int {
     max(0, subviews.count - borderStartIndex)
   }
+}
+
+enum TableLayoutWidthBehavior {
+  case compact
+  case fillAvailable
+  case balancedFillAvailable(maxWidthFraction: CGFloat, widthAdjustment: CGFloat)
+}
+
+extension View {
+  func markdownTableLayoutWidthBehavior(_ behavior: TableLayoutWidthBehavior) -> some View {
+    self.environment(\.tableLayoutWidthBehavior, behavior)
+  }
+}
+
+extension EnvironmentValues {
+  var tableLayoutWidthBehavior: TableLayoutWidthBehavior {
+    get { self[TableLayoutWidthBehaviorKey.self] }
+    set { self[TableLayoutWidthBehaviorKey.self] = newValue }
+  }
+}
+
+private struct TableLayoutWidthBehaviorKey: EnvironmentKey {
+  static let defaultValue = TableLayoutWidthBehavior.compact
 }
