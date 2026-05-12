@@ -97,18 +97,64 @@ private struct MarkdownTableLayout: Layout {
   let displayScale: CGFloat
   let visibleBorders: TableBorderSelector
 
-  func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-    self.computeLayout(proposal: proposal, subviews: subviews).tableBounds.bounds.size
+  fileprivate func makeCache(subviews: Subviews) -> Cache {
+    .init(structure: self.structure(subviews: subviews))
   }
 
-  func placeSubviews(
-    in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()
-  ) {
+  fileprivate func updateCache(_ cache: inout Cache, subviews: Subviews) {
+    cache.generation &+= 1
+    cache.structure = self.structure(subviews: subviews)
+    cache.pendingLayout = nil
+  }
+
+  fileprivate func sizeThatFits(
+    proposal: ProposedViewSize,
+    subviews: Subviews,
+    cache: inout Cache
+  ) -> CGSize {
+    self.updateCacheStructureIfNeeded(&cache, subviews: subviews)
+    cache.pendingLayout = nil
+
     let layout = self.computeLayout(
       proposal: proposal,
       subviews: subviews,
-      fixedTableWidth: bounds.width
+      structure: cache.structure
     )
+    cache.pendingLayout = .init(
+      key: self.pendingLayoutKey(
+        generation: cache.generation,
+        proposal: proposal,
+        resolvedTableWidth: layout.tableBounds.bounds.width,
+        structure: cache.structure
+      ),
+      layout: layout
+    )
+
+    return layout.tableBounds.bounds.size
+  }
+
+  fileprivate func placeSubviews(
+    in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout Cache
+  ) {
+    self.updateCacheStructureIfNeeded(&cache, subviews: subviews)
+
+    let key = self.pendingLayoutKey(
+      generation: cache.generation,
+      proposal: proposal,
+      resolvedTableWidth: bounds.width,
+      structure: cache.structure
+    )
+    let pendingLayout = cache.pendingLayout
+    cache.pendingLayout = nil
+
+    let layout =
+      pendingLayout.flatMap { self.reusableLayout($0, matching: key) }
+      ?? self.computeLayout(
+        proposal: proposal,
+        subviews: subviews,
+        structure: cache.structure,
+        fixedTableWidth: bounds.width
+      )
 
     for cell in layout.backgrounds {
       subviews[cell.index].place(
@@ -138,33 +184,70 @@ private struct MarkdownTableLayout: Layout {
 
 @available(iOS 16.0, macOS 13.0, tvOS 16.0, watchOS 9.0, *)
 extension MarkdownTableLayout {
-  private struct PlacedSubview {
+  fileprivate struct Cache {
+    var generation = 0
+    var structure: Structure
+    var pendingLayout: PendingLayout?
+  }
+
+  fileprivate struct Structure: Equatable {
+    let rowCount: Int
+    let columnCount: Int
+    let subviewCount: Int
+    let cellStartIndex: Int
+    let borderStartIndex: Int
+    let borderSubviewCount: Int
+  }
+
+  fileprivate struct LayoutInputs: Equatable {
+    let columnAlignments: [RawTableColumnAlignment]
+    let widthBehavior: TableLayoutWidthBehavior
+    let layoutBorderWidth: CGFloat
+    let decorationBorderWidth: CGFloat
+    let displayScale: CGFloat
+  }
+
+  fileprivate struct PendingLayoutKey: Equatable {
+    let generation: Int
+    let proposalWidth: CGFloat?
+    let resolvedTableWidth: CGFloat
+    let structure: Structure
+    let inputs: LayoutInputs
+  }
+
+  fileprivate struct PendingLayout {
+    let key: PendingLayoutKey
+    let layout: ComputedLayout
+  }
+
+  fileprivate struct PlacedSubview {
     let index: Int
     let bounds: CGRect
   }
 
-  private struct ComputedLayout {
+  fileprivate struct ComputedLayout {
     var backgrounds: [PlacedSubview] = []
     var cells: [PlacedSubview] = []
     var borders: [PlacedSubview] = []
     var tableBounds: TableBounds
+    var borderRects: [CGRect] = []
   }
 
   private func computeLayout(
     proposal: ProposedViewSize,
     subviews: Subviews,
+    structure: Structure,
     fixedTableWidth: CGFloat? = nil
   ) -> ComputedLayout {
     guard self.rowCount > 0, self.columnCount > 0 else {
       return .init(tableBounds: .init(bounds: .zero, rows: [], columns: []))
     }
 
-    let cellStartIndex = self.rowCount * self.columnCount
-    let cellSizes = self.cellSizes(subviews: subviews, cellStartIndex: cellStartIndex)
+    let cellSizes = self.cellSizes(subviews: subviews, cellStartIndex: structure.cellStartIndex)
     let minimumCellSizes = self.cellSizes(
       proposal: .init(width: 0, height: nil),
       subviews: subviews,
-      cellStartIndex: cellStartIndex
+      cellStartIndex: structure.cellStartIndex
     )
     let columnWidths = self.columnWidths(
       proposal: proposal,
@@ -175,7 +258,7 @@ extension MarkdownTableLayout {
     let measuredCellSizes = self.cellSizes(
       columnWidths: columnWidths,
       subviews: subviews,
-      cellStartIndex: cellStartIndex
+      cellStartIndex: structure.cellStartIndex
     )
     let rowHeights = self.rowHeights(cellSizes: measuredCellSizes)
     let tableBounds = self.tableBounds(
@@ -184,7 +267,7 @@ extension MarkdownTableLayout {
       snapsWidthToDisplayScale: fixedTableWidth == nil
     )
     let borderRects = self.visibleBorders.rectangles(tableBounds, self.decorationBorderWidth)
-    var layout = ComputedLayout(tableBounds: tableBounds)
+    var layout = ComputedLayout(tableBounds: tableBounds, borderRects: borderRects)
 
     for row in 0..<self.rowCount {
       for column in 0..<self.columnCount {
@@ -195,25 +278,92 @@ extension MarkdownTableLayout {
         )
         layout.cells.append(
           .init(
-            index: self.cellSubviewIndex(row: row, column: column, cellStartIndex: cellStartIndex),
+            index: self.cellSubviewIndex(
+              row: row,
+              column: column,
+              cellStartIndex: structure.cellStartIndex
+            ),
             bounds: self.cellBounds(cellSize: cellSize, in: bounds, column: column)
           )
         )
       }
     }
 
-    let borderStartIndex = cellStartIndex + self.rowCount * self.columnCount
-    for index in 0..<self.borderSubviewCount(subviews: subviews, borderStartIndex: borderStartIndex)
-    {
+    for index in 0..<structure.borderSubviewCount {
       layout.borders.append(
         .init(
-          index: borderStartIndex + index,
+          index: structure.borderStartIndex + index,
           bounds: index < borderRects.count ? borderRects[index] : .zero
         )
       )
     }
 
     return layout
+  }
+
+  fileprivate func structure(subviews: Subviews) -> Structure {
+    let cellStartIndex = self.rowCount * self.columnCount
+    let borderStartIndex = cellStartIndex + self.rowCount * self.columnCount
+
+    return .init(
+      rowCount: self.rowCount,
+      columnCount: self.columnCount,
+      subviewCount: subviews.count,
+      cellStartIndex: cellStartIndex,
+      borderStartIndex: borderStartIndex,
+      borderSubviewCount: max(0, subviews.count - borderStartIndex)
+    )
+  }
+
+  fileprivate func updateCacheStructureIfNeeded(_ cache: inout Cache, subviews: Subviews) {
+    let structure = self.structure(subviews: subviews)
+    guard cache.structure != structure else {
+      return
+    }
+
+    cache.generation &+= 1
+    cache.structure = structure
+    cache.pendingLayout = nil
+  }
+
+  fileprivate func pendingLayoutKey(
+    generation: Int,
+    proposal: ProposedViewSize,
+    resolvedTableWidth: CGFloat,
+    structure: Structure
+  ) -> PendingLayoutKey {
+    .init(
+      generation: generation,
+      proposalWidth: proposal.width,
+      resolvedTableWidth: resolvedTableWidth,
+      structure: structure,
+      inputs: .init(
+        columnAlignments: self.columnAlignments,
+        widthBehavior: self.widthBehavior,
+        layoutBorderWidth: self.layoutBorderWidth,
+        decorationBorderWidth: self.decorationBorderWidth,
+        displayScale: self.displayScale
+      )
+    )
+  }
+
+  fileprivate func reusableLayout(
+    _ pendingLayout: PendingLayout,
+    matching key: PendingLayoutKey
+  ) -> ComputedLayout? {
+    guard pendingLayout.key == key else {
+      return nil
+    }
+
+    let currentBorderRects = self.visibleBorders.rectangles(
+      pendingLayout.layout.tableBounds,
+      self.decorationBorderWidth
+    )
+    guard pendingLayout.layout.borderRects == currentBorderRects else {
+      return nil
+    }
+
+    return pendingLayout.layout
   }
 
   private func cellSizes(
@@ -559,10 +709,6 @@ extension MarkdownTableLayout {
   private func cellSubviewIndex(row: Int, column: Int, cellStartIndex: Int) -> Int {
     cellStartIndex + row * self.columnCount + column
   }
-
-  private func borderSubviewCount(subviews: Subviews, borderStartIndex: Int) -> Int {
-    max(0, subviews.count - borderStartIndex)
-  }
 }
 
 enum TableLayoutWidthBehavior {
@@ -570,6 +716,8 @@ enum TableLayoutWidthBehavior {
   case fillAvailable
   case balancedFillAvailable(maxWidthFraction: CGFloat, widthAdjustment: CGFloat)
 }
+
+extension TableLayoutWidthBehavior: Equatable {}
 
 extension View {
   func markdownTableLayoutWidthBehavior(_ behavior: TableLayoutWidthBehavior) -> some View {

@@ -132,22 +132,22 @@ extension MarkdownListItemSequenceLayout {
   }
 
   private func computeLayout(proposal: ProposedViewSize, subviews: Subviews) -> ComputedLayout {
-    let markerTrailing =
+    let unconstrainedDimensions =
       subviews
       .map { subview in
-        subview.dimensions(in: .init(width: proposal.width, height: nil))[
-          .markdownListMarkerTrailing
-        ]
+        subview.dimensions(in: .init(width: proposal.width, height: nil))
+      }
+    let markerTrailing =
+      unconstrainedDimensions
+      .map { dimensions in
+        dimensions[.markdownListMarkerTrailing]
       }
       .max() ?? 0
 
     var layout = ComputedLayout(markerTrailing: markerTrailing)
 
-    for index in subviews.indices {
-      let unconstrainedDimensions = subviews[index].dimensions(
-        in: .init(width: proposal.width, height: nil)
-      )
-      let itemMarkerTrailing = unconstrainedDimensions[.markdownListMarkerTrailing]
+    for (index, dimensions) in zip(subviews.indices, unconstrainedDimensions) {
+      let itemMarkerTrailing = dimensions[.markdownListMarkerTrailing]
       let leadingOffset = markerTrailing - itemMarkerTrailing
       let proposedWidth = proposal.width.map { max(0, $0 - leadingOffset) }
       let size = subviews[index].sizeThatFits(.init(width: proposedWidth, height: nil))
