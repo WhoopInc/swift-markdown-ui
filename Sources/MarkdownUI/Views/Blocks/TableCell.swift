@@ -23,7 +23,6 @@ struct TableCell: View {
         content: .init(block: .paragraph(content: cell.content))
       )
     )
-    .tableCellBounds(forRow: self.row, column: self.column)
   }
 
   @ViewBuilder private var label: some View {

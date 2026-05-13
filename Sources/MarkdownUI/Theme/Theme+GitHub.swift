@@ -36,26 +36,26 @@ extension Theme {
         configuration.label
           .relativePadding(.bottom, length: .em(0.3))
           .relativeLineSpacing(.em(0.125))
-          .markdownMargin(top: 24, bottom: 16)
           .markdownTextStyle {
             FontWeight(.semibold)
             FontSize(.em(2))
           }
         Divider().overlay(Color.divider)
       }
+      .markdownMargin(top: 24, bottom: 16)
     }
     .heading2 { configuration in
       VStack(alignment: .leading, spacing: 0) {
         configuration.label
           .relativePadding(.bottom, length: .em(0.3))
           .relativeLineSpacing(.em(0.125))
-          .markdownMargin(top: 24, bottom: 16)
           .markdownTextStyle {
             FontWeight(.semibold)
             FontSize(.em(1.5))
           }
         Divider().overlay(Color.divider)
       }
+      .markdownMargin(top: 24, bottom: 16)
     }
     .heading3 { configuration in
       configuration.label
@@ -109,6 +109,7 @@ extension Theme {
           .relativePadding(.horizontal, length: .em(1))
       }
       .fixedSize(horizontal: false, vertical: true)
+      .markdownMargin(top: 0, bottom: 16)
     }
     .codeBlock { configuration in
       ScrollView(.horizontal) {
@@ -125,16 +126,26 @@ extension Theme {
       .clipShape(RoundedRectangle(cornerRadius: 6))
       .markdownMargin(top: 0, bottom: 16)
     }
+    .list { configuration in
+      configuration.label
+        .markdownMargin(top: .em(0.25), bottom: .em(1))
+    }
     .listItem { configuration in
       configuration.label
         .markdownMargin(top: .em(0.25))
     }
     .taskListMarker { configuration in
-      Image(systemName: configuration.isCompleted ? "checkmark.square.fill" : "square")
+      let marker = Image(systemName: configuration.isCompleted ? "checkmark.square.fill" : "square")
         .symbolRenderingMode(.hierarchical)
         .foregroundStyle(Color.checkbox, Color.checkboxBackground)
         .imageScale(.small)
         .relativeFrame(minWidth: .em(1.5), alignment: .trailing)
+
+      if #available(iOS 16.0, macOS 13.0, tvOS 16.0, watchOS 9.0, *) {
+        marker.layoutValue(key: ListMarkerVerticalOffsetLayoutValueKey.self, value: -0.5)
+      } else {
+        marker
+      }
     }
     .table { configuration in
       configuration.label
@@ -142,6 +153,9 @@ extension Theme {
         .markdownTableBorderStyle(.init(color: .border))
         .markdownTableBackgroundStyle(
           .alternatingRows(Color.background, Color.secondaryBackground)
+        )
+        .markdownTableLayoutWidthBehavior(
+          .balancedFillAvailable(maxWidthFraction: 0.9595, widthAdjustment: 0)
         )
         .markdownMargin(top: 0, bottom: 16)
     }

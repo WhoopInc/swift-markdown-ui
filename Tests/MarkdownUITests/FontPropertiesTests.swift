@@ -10,7 +10,7 @@
       var fontProperties = FontProperties()
 
       // then
-      XCTAssertEqual(
+      XCTAssertFontEqual(
         Font.system(size: FontProperties.defaultSize, design: .default),
         Font.withProperties(fontProperties)
       )
@@ -19,7 +19,7 @@
       fontProperties = FontProperties(family: .custom("Menlo"))
 
       // then
-      XCTAssertEqual(
+      XCTAssertFontEqual(
         Font.custom("Menlo", fixedSize: FontProperties.defaultSize),
         Font.withProperties(fontProperties)
       )
@@ -28,7 +28,7 @@
       fontProperties = FontProperties(familyVariant: .monospaced)
 
       // then
-      XCTAssertEqual(
+      XCTAssertFontEqual(
         Font.system(size: FontProperties.defaultSize, design: .default).monospaced(),
         Font.withProperties(fontProperties)
       )
@@ -37,7 +37,7 @@
       fontProperties = FontProperties(capsVariant: .lowercaseSmallCaps)
 
       // then
-      XCTAssertEqual(
+      XCTAssertFontEqual(
         Font.system(size: FontProperties.defaultSize, design: .default).lowercaseSmallCaps(),
         Font.withProperties(fontProperties)
       )
@@ -46,7 +46,7 @@
       fontProperties = FontProperties(digitVariant: .monospaced)
 
       // then
-      XCTAssertEqual(
+      XCTAssertFontEqual(
         Font.system(size: FontProperties.defaultSize, design: .default).monospacedDigit(),
         Font.withProperties(fontProperties)
       )
@@ -55,7 +55,7 @@
       fontProperties = FontProperties(style: .italic)
 
       // then
-      XCTAssertEqual(
+      XCTAssertFontEqual(
         Font.system(size: FontProperties.defaultSize, design: .default).italic(),
         Font.withProperties(fontProperties)
       )
@@ -64,7 +64,7 @@
       fontProperties = FontProperties(weight: .heavy)
 
       // then
-      XCTAssertEqual(
+      XCTAssertFontEqual(
         Font.system(size: FontProperties.defaultSize, design: .default).weight(.heavy),
         Font.withProperties(fontProperties)
       )
@@ -73,7 +73,7 @@
       fontProperties = FontProperties(size: 42)
 
       // then
-      XCTAssertEqual(
+      XCTAssertFontEqual(
         Font.system(size: 42, design: .default),
         Font.withProperties(fontProperties)
       )
@@ -82,10 +82,23 @@
       fontProperties = FontProperties(scale: 1.5)
 
       // then
-      XCTAssertEqual(
+      XCTAssertFontEqual(
         Font.system(size: round(FontProperties.defaultSize * 1.5), design: .default),
         Font.withProperties(fontProperties)
       )
+    }
+
+    private func XCTAssertFontEqual(
+      _ lhs: Font,
+      _ rhs: Font,
+      file: StaticString = #filePath,
+      line: UInt = #line
+    ) {
+      #if os(macOS)
+        XCTAssertEqual(String(describing: lhs), String(describing: rhs), file: file, line: line)
+      #else
+        XCTAssertEqual(lhs, rhs, file: file, line: line)
+      #endif
     }
   }
 #endif

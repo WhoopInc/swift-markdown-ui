@@ -80,6 +80,7 @@ extension Theme {
         }
         .relativePadding(.leading, length: .em(2))
         .relativePadding(.trailing, length: .em(1))
+        .markdownMargin(top: .zero, bottom: .em(1))
     }
     .codeBlock { configuration in
       ScrollView(.horizontal) {
@@ -97,6 +98,11 @@ extension Theme {
     .table { configuration in
       configuration.label
         .fixedSize(horizontal: false, vertical: true)
+        .markdownTableLayoutWidthBehavior(.fillAvailable)
+        .markdownMargin(top: .zero, bottom: .em(1))
+    }
+    .list { configuration in
+      configuration.label
         .markdownMargin(top: .zero, bottom: .em(1))
     }
     .tableCell { configuration in

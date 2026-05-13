@@ -64,33 +64,57 @@ extension BlockStyle where Configuration == ListMarkerConfiguration {
   /// A list marker style that uses decimal numbers beginning with 1.
   public static func decimal(minWidth: RelativeSize, alignment: Alignment = .center) -> Self {
     BlockStyle { configuration in
-      Text("\(configuration.itemNumber).")
+      let marker = Text("\(configuration.itemNumber).")
         .monospacedDigit()
         .relativeFrame(minWidth: minWidth, alignment: alignment)
+
+      if #available(iOS 16.0, macOS 13.0, tvOS 16.0, watchOS 9.0, *) {
+        marker.layoutValue(key: ListMarkerAlignmentOffsetLayoutValueKey.self, value: -0.5)
+      } else {
+        marker
+      }
     }
   }
 
   /// A list marker style that uses uppercase roman numerals beginning with `I`.
   public static func upperRoman(minWidth: RelativeSize, alignment: Alignment = .center) -> Self {
     BlockStyle { configuration in
-      Text(configuration.itemNumber.roman + ".")
+      let marker = Text(configuration.itemNumber.roman + ".")
         .relativeFrame(minWidth: minWidth, alignment: alignment)
+
+      if #available(iOS 16.0, macOS 13.0, tvOS 16.0, watchOS 9.0, *) {
+        marker.layoutValue(key: ListMarkerAlignmentOffsetLayoutValueKey.self, value: -0.5)
+      } else {
+        marker
+      }
     }
   }
 
   /// A list marker style that uses lowercase roman numerals beginning with `i`.
   public static func lowerRoman(minWidth: RelativeSize, alignment: Alignment = .center) -> Self {
     BlockStyle { configuration in
-      Text(configuration.itemNumber.roman.lowercased() + ".")
+      let marker = Text(configuration.itemNumber.roman.lowercased() + ".")
         .relativeFrame(minWidth: minWidth, alignment: alignment)
+
+      if #available(iOS 16.0, macOS 13.0, tvOS 16.0, watchOS 9.0, *) {
+        marker.layoutValue(key: ListMarkerAlignmentOffsetLayoutValueKey.self, value: -0.5)
+      } else {
+        marker
+      }
     }
   }
 
   /// A list marker style that uses a dash.
   public static func dash(minWidth: RelativeSize, alignment: Alignment = .center) -> Self {
     BlockStyle { _ in
-      Text("-")
+      let marker = Text("-")
         .relativeFrame(minWidth: minWidth, alignment: alignment)
+
+      if #available(iOS 16.0, macOS 13.0, tvOS 16.0, watchOS 9.0, *) {
+        marker.layoutValue(key: ListMarkerAlignmentOffsetLayoutValueKey.self, value: -0.5)
+      } else {
+        marker
+      }
     }
   }
 
