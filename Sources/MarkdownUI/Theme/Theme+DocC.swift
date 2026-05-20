@@ -129,6 +129,7 @@ extension Theme {
       // DocC renders task lists as bullet lists
       ListBullet.disc
         .relativeFrame(minWidth: .em(1.5), alignment: .trailing)
+        .listMarkerVerticalOffset(ListBullet.disc.verticalOffset)
     }
     .table { configuration in
       configuration.label

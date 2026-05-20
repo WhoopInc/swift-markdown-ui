@@ -171,8 +171,14 @@ extension MarkdownBlockSequenceLayout {
       return spacing
     }
 
-    return subviews[predecessorIndex].spacing.distance(
+    let systemSpacing = subviews[predecessorIndex].spacing.distance(
       to: subviews[index].spacing, along: .vertical)
+
+    if systemSpacing > 0 {
+      return systemSpacing
+    }
+
+    return 16
   }
 }
 

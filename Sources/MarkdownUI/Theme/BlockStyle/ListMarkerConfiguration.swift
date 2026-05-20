@@ -123,6 +123,7 @@ extension BlockStyle where Configuration == ListMarkerConfiguration {
     BlockStyle { _ in
       ListBullet.disc
         .relativeFrame(minWidth: minWidth, alignment: alignment)
+        .listMarkerVerticalOffset(ListBullet.disc.verticalOffset)
     }
   }
 
@@ -131,6 +132,7 @@ extension BlockStyle where Configuration == ListMarkerConfiguration {
     BlockStyle { _ in
       ListBullet.circle
         .relativeFrame(minWidth: minWidth, alignment: alignment)
+        .listMarkerVerticalOffset(ListBullet.circle.verticalOffset)
     }
   }
 
@@ -139,6 +141,7 @@ extension BlockStyle where Configuration == ListMarkerConfiguration {
     BlockStyle { _ in
       ListBullet.square
         .relativeFrame(minWidth: minWidth, alignment: alignment)
+        .listMarkerVerticalOffset(ListBullet.square.verticalOffset)
     }
   }
 }

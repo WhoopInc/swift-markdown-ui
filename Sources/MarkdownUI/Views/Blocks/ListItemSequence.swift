@@ -184,12 +184,18 @@ extension MarkdownListItemSequenceLayout {
       return spacing
     }
 
+    let systemSpacing = subviews[predecessorIndex].spacing.distance(
+      to: subviews[index].spacing, along: .vertical)
+
+    if systemSpacing > 0 {
+      return systemSpacing
+    }
+
     if !self.tightSpacingEnabled {
       return self.looseListItemSpacing
     }
 
-    return subviews[predecessorIndex].spacing.distance(
-      to: subviews[index].spacing, along: .vertical)
+    return 0
   }
 }
 
@@ -325,4 +331,15 @@ enum ListMarkerAlignmentOffsetLayoutValueKey: LayoutValueKey {
 @available(iOS 16.0, macOS 13.0, tvOS 16.0, watchOS 9.0, *)
 enum ListMarkerMultilineVerticalOffsetLayoutValueKey: LayoutValueKey {
   static let defaultValue: CGFloat = 0
+}
+
+extension View {
+  @ViewBuilder
+  func listMarkerVerticalOffset(_ offset: CGFloat) -> some View {
+    if #available(iOS 16.0, macOS 13.0, tvOS 16.0, watchOS 9.0, *) {
+      self.layoutValue(key: ListMarkerVerticalOffsetLayoutValueKey.self, value: offset)
+    } else {
+      self
+    }
+  }
 }
