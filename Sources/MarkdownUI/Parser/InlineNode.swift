@@ -2,6 +2,7 @@ import Foundation
 
 enum InlineNode: Hashable, Sendable {
   case text(String)
+  case opacity(Double, children: [InlineNode])
   case softBreak
   case lineBreak
   case code(String)
@@ -17,6 +18,8 @@ extension InlineNode {
   var children: [InlineNode] {
     get {
       switch self {
+      case .opacity(_, let children):
+        return children
       case .emphasis(let children):
         return children
       case .strong(let children):
@@ -34,6 +37,8 @@ extension InlineNode {
 
     set {
       switch self {
+      case .opacity(let opacity, _):
+        self = .opacity(opacity, children: newValue)
       case .emphasis:
         self = .emphasis(children: newValue)
       case .strong:

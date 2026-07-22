@@ -379,6 +379,9 @@ extension UnsafeNode {
       guard let node = cmark_node_new(CMARK_NODE_TEXT) else { return nil }
       cmark_node_set_literal(node, content)
       return node
+    case .opacity(_, let children):
+      guard children.count == 1 else { return nil }
+      return children.first.flatMap(UnsafeNode.make)
     case .softBreak:
       return cmark_node_new(CMARK_NODE_SOFTBREAK)
     case .lineBreak:

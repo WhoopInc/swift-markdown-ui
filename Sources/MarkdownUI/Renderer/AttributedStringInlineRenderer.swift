@@ -25,6 +25,7 @@ private struct AttributedStringInlineRenderer {
   private let textStyles: InlineTextStyles
   private let softBreakMode: SoftBreak.Mode
   private var attributes: AttributeContainer
+  private var opacity = 1.0
   private var shouldSkipNextWhitespace = false
 
   init(
@@ -43,6 +44,8 @@ private struct AttributedStringInlineRenderer {
     switch inline {
     case .text(let content):
       self.renderText(content)
+    case .opacity(let opacity, let children):
+      self.renderOpacity(opacity, children: children)
     case .softBreak:
       self.renderSoftBreak()
     case .lineBreak:
@@ -72,7 +75,18 @@ private struct AttributedStringInlineRenderer {
       text = text.replacingOccurrences(of: "^\\s+", with: "", options: .regularExpression)
     }
 
-    self.result += .init(text, attributes: self.attributes)
+    self.result += .init(text, attributes: self.attributes.applyingOpacity(self.opacity))
+  }
+
+  private mutating func renderOpacity(_ opacity: Double, children: [InlineNode]) {
+    let savedOpacity = self.opacity
+    self.opacity *= opacity
+
+    for child in children {
+      self.render(child)
+    }
+
+    self.opacity = savedOpacity
   }
 
   private mutating func renderSoftBreak() {
@@ -80,18 +94,21 @@ private struct AttributedStringInlineRenderer {
     case .space where self.shouldSkipNextWhitespace:
       self.shouldSkipNextWhitespace = false
     case .space:
-      self.result += .init(" ", attributes: self.attributes)
+      self.result += .init(" ", attributes: self.attributes.applyingOpacity(self.opacity))
     case .lineBreak:
       self.renderLineBreak()
     }
   }
 
   private mutating func renderLineBreak() {
-    self.result += .init("\n", attributes: self.attributes)
+    self.result += .init("\n", attributes: self.attributes.applyingOpacity(self.opacity))
   }
 
   private mutating func renderCode(_ code: String) {
-    self.result += .init(code, attributes: self.textStyles.code.mergingAttributes(self.attributes))
+    self.result += .init(
+      code,
+      attributes: self.textStyles.code.mergingAttributes(self.attributes).applyingOpacity(self.opacity)
+    )
   }
 
   private mutating func renderHTML(_ html: String) {
@@ -161,5 +178,14 @@ extension TextStyle {
     var newAttributes = attributes
     self._collectAttributes(in: &newAttributes)
     return newAttributes
+  }
+}
+
+extension AttributeContainer {
+  fileprivate func applyingOpacity(_ opacity: Double) -> AttributeContainer {
+    guard opacity < 1 else { return self }
+    var attributes = self
+    attributes.foregroundColor = (attributes.foregroundColor ?? .primary).opacity(opacity)
+    return attributes
   }
 }

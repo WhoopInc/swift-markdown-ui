@@ -99,18 +99,18 @@ public struct MarkdownContent: Equatable, MarkdownContentProtocol {
 
   /// Renders this Markdown content value as a Markdown-formatted text.
   public func renderMarkdown() -> String {
-    let result = self.blocks.renderMarkdown()
+    let result = self.blocks.removingTextOpacity.renderMarkdown()
     return result.hasSuffix("\n") ? String(result.dropLast()) : result
   }
 
   /// Renders this Markdown content value as plain text.
   public func renderPlainText() -> String {
-    let result = self.blocks.renderPlainText()
+    let result = self.blocks.removingTextOpacity.renderPlainText()
     return result.hasSuffix("\n") ? String(result.dropLast()) : result
   }
 
   /// Renders this Markdown content value as HTML code.
   public func renderHTML() -> String {
-    self.blocks.renderHTML()
+    self.blocks.removingTextOpacity.renderHTML()
   }
 }
