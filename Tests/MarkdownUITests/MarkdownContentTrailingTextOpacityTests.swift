@@ -50,6 +50,16 @@ final class MarkdownContentTrailingTextOpacityTests: XCTestCase {
     XCTAssertEqual(transformed.opacityRuns.map(\.text).joined(), "graph.")
   }
 
+  func testFencedCodeCountsTowardTailWithoutChangingTheBlock() {
+    let content = MarkdownContent("Before\n\n```\n1234567890\n```")
+
+    let transformed = content.applyingTrailingTextOpacity(window: 8, minimumOpacity: 0.12)
+
+    XCTAssertTrue(transformed.opacityRuns.isEmpty)
+    XCTAssertEqual(transformed.renderPlainText(), content.renderPlainText())
+    XCTAssertEqual(transformed.renderMarkdown(), content.renderMarkdown())
+  }
+
   func testSmallWindowLeavesContentUnchanged() {
     let content = MarkdownContent("Hello")
 

@@ -1,11 +1,12 @@
 import Foundation
 
 public extension MarkdownContent {
-  /// Returns content whose trailing rendered text gradually transitions from `1` to
+  /// Returns content whose trailing inline text gradually transitions from `1` to
   /// `minimumOpacity`, while preserving the original Markdown structure and inline styles.
   ///
   /// The window is measured in extended grapheme clusters. Markdown syntax and block separators
-  /// are not counted. A window smaller than two leaves the content unchanged.
+  /// are not counted. Fenced code and raw HTML blocks count toward the document tail but remain
+  /// unchanged. A window smaller than two leaves the content unchanged.
   func applyingTrailingTextOpacity(
     window: Int,
     minimumOpacity: Double
@@ -19,36 +20,46 @@ public extension MarkdownContent {
     let windowStart = max(totalCount - window, 0)
     var offset = 0
 
-    let blocks = self.blocks.rewrite { inline -> [InlineNode] in
-      switch inline {
-      case .text(let content):
-        return Self.applyingTrailingTextOpacity(
-          to: content,
-          offset: &offset,
-          totalCount: totalCount,
-          windowStart: windowStart,
-          window: window,
-          minimumOpacity: minimumOpacity,
-          makeNode: InlineNode.text
-        )
-      case .code(let content):
-        return Self.applyingTrailingTextOpacity(
-          to: content,
-          offset: &offset,
-          totalCount: totalCount,
-          windowStart: windowStart,
-          window: window,
-          minimumOpacity: minimumOpacity,
-          makeNode: InlineNode.code
-        )
-      case .softBreak, .lineBreak:
-        offset += 1
-        return [inline]
-      case .html(let content):
-        offset += content.renderedCharacterCount
-        return [inline]
+    let blocks = self.blocks.rewrite { (block: BlockNode) -> [BlockNode] in
+      switch block {
+      case .paragraph, .heading, .table:
+        return block.rewrite { inline -> [InlineNode] in
+          switch inline {
+          case .text(let content):
+            return Self.applyingTrailingTextOpacity(
+              to: content,
+              offset: &offset,
+              totalCount: totalCount,
+              windowStart: windowStart,
+              window: window,
+              minimumOpacity: minimumOpacity,
+              makeNode: InlineNode.text
+            )
+          case .code(let content):
+            return Self.applyingTrailingTextOpacity(
+              to: content,
+              offset: &offset,
+              totalCount: totalCount,
+              windowStart: windowStart,
+              window: window,
+              minimumOpacity: minimumOpacity,
+              makeNode: InlineNode.code
+            )
+          case .softBreak, .lineBreak:
+            offset += 1
+            return [inline]
+          case .html(let content):
+            offset += content.renderedCharacterCount
+            return [inline]
+          default:
+            return [inline]
+          }
+        }
+      case .codeBlock(_, let content), .htmlBlock(let content):
+        offset += content.renderedBlockCharacterCount
+        return [block]
       default:
-        return [inline]
+        return [block]
       }
     }
 
@@ -121,7 +132,9 @@ private extension BlockNode {
           cell.content.flatMap(\.renderedCharacterCounts)
         }
       }
-    case .codeBlock, .htmlBlock, .thematicBreak:
+    case .codeBlock(_, let content), .htmlBlock(let content):
+      return [content.renderedBlockCharacterCount]
+    case .thematicBreak:
       return []
     }
   }
@@ -151,6 +164,10 @@ private extension InlineNode {
 private extension String {
   var renderedCharacterCount: Int {
     HTMLTag(self)?.name.lowercased() == "br" ? 1 : self.count
+  }
+
+  var renderedBlockCharacterCount: Int {
+    self.hasSuffix("\n") ? String(self.dropLast()).count : self.count
   }
 }
 
