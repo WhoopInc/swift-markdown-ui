@@ -1,4 +1,5 @@
 @testable import MarkdownUI
+import SwiftUI
 import XCTest
 
 final class MarkdownContentTrailingTextOpacityTests: XCTestCase {
@@ -20,6 +21,61 @@ final class MarkdownContentTrailingTextOpacityTests: XCTestCase {
     let transformed = content.applyingTrailingTextOpacity(fadeCharacterCount: 3, minimumOpacity: 0.2)
 
     XCTAssertEqual(transformed.opacityRuns.map(\.text), ["A", "👨‍👩‍👧‍👦", "B"])
+  }
+
+  func testFadesSoftAndHardLineBreaks() {
+    let content = MarkdownContent("A\nB  \nC")
+
+    let transformed = content.applyingTrailingTextOpacity(
+      fadeCharacterCount: 5,
+      minimumOpacity: 0.2
+    )
+
+    XCTAssertEqual(transformed.opacityRuns.map(\.text), ["A", " ", "B", "\n", "C"])
+    assertEqual(
+      transformed.opacityRuns.map(\.opacity),
+      [1, 0.8, 0.6, 0.4, 0.2],
+      accuracy: 0.0001
+    )
+  }
+
+  func testFadesInlineHTMLWithoutChangingMarkdown() {
+    let content = MarkdownContent("A<kbd>B<br>C")
+
+    let transformed = content.applyingTrailingTextOpacity(
+      fadeCharacterCount: 9,
+      minimumOpacity: 0.2
+    )
+
+    XCTAssertEqual(
+      transformed.opacityRuns.map(\.text),
+      ["A", "<", "k", "b", "d", ">", "B", "<br>", "C"]
+    )
+    XCTAssertEqual(transformed.renderMarkdown(), content.renderMarkdown())
+  }
+
+  func testNormalizesOpacityWhenContentIsShorterThanFadeCharacterCount() {
+    let content = MarkdownContent("Hi")
+
+    let transformed = content.applyingTrailingTextOpacity(
+      fadeCharacterCount: 8,
+      minimumOpacity: 0.2
+    )
+
+    XCTAssertEqual(transformed.opacityRuns.map(\.text), ["H", "i"])
+    assertEqual(transformed.opacityRuns.map(\.opacity), [1, 0.2], accuracy: 0.0001)
+  }
+
+  func testAppliesMinimumOpacityToSingleCharacterContent() {
+    let content = MarkdownContent("H")
+
+    let transformed = content.applyingTrailingTextOpacity(
+      fadeCharacterCount: 8,
+      minimumOpacity: 0.2
+    )
+
+    XCTAssertEqual(transformed.opacityRuns.map(\.text), ["H"])
+    XCTAssertEqual(transformed.opacityRuns.first?.opacity ?? 0, 0.2, accuracy: 0.0001)
   }
 
   func testPreservesNestedInlineStyles() {
@@ -60,9 +116,13 @@ final class MarkdownContentTrailingTextOpacityTests: XCTestCase {
     XCTAssertEqual(transformed.renderMarkdown(), content.renderMarkdown())
   }
 
-  func testSmallFadeCharacterCountLeavesContentUnchanged() {
+  func testFadeCharacterCountBelowTwoLeavesContentUnchanged() {
     let content = MarkdownContent("Hello")
 
+    XCTAssertEqual(
+      content.applyingTrailingTextOpacity(fadeCharacterCount: 0, minimumOpacity: 0.2),
+      content
+    )
     XCTAssertEqual(
       content.applyingTrailingTextOpacity(fadeCharacterCount: 1, minimumOpacity: 0.2),
       content
@@ -77,6 +137,39 @@ final class MarkdownContentTrailingTextOpacityTests: XCTestCase {
 
     XCTAssertEqual(belowZero.opacityRuns.last?.opacity, 0)
     XCTAssertEqual(aboveOne.opacityRuns.last?.opacity, 1)
+  }
+
+  func testSerializesOpacityNodesWithoutDroppingContent() {
+    let blocks: [BlockNode] = [
+      .paragraph(content: [
+        .text("A"),
+        .opacity(0.5, children: [.text("B"), .text("C")]),
+      ])
+    ]
+
+    XCTAssertEqual(blocks.renderMarkdown(), "ABC\n")
+  }
+
+  func testAppliesOpacityToForegroundAndBackgroundColors() throws {
+    let emptyStyle = EmptyTextStyle()
+    let textStyles = InlineTextStyles(
+      code: BackgroundColor(.cyan),
+      emphasis: emptyStyle,
+      strong: emptyStyle,
+      strikethrough: emptyStyle,
+      link: emptyStyle
+    )
+    let attributedString = InlineNode.opacity(0.2, children: [.code("code")])
+      .renderAttributedString(
+        baseURL: nil,
+        textStyles: textStyles,
+        softBreakMode: .space,
+        attributes: AttributeContainer().foregroundColor(.red)
+      )
+
+    let attributes = try XCTUnwrap(attributedString.runs.first?.attributes)
+    XCTAssertEqual(attributes.foregroundColor, Color.red.opacity(0.2))
+    XCTAssertEqual(attributes.backgroundColor, Color.cyan.opacity(0.2))
   }
 }
 

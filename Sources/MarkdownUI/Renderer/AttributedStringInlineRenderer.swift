@@ -186,6 +186,9 @@ extension AttributeContainer {
     guard opacity < 1 else { return self }
     var attributes = self
     attributes.foregroundColor = (attributes.foregroundColor ?? .primary).opacity(opacity)
+    if let backgroundColor = attributes.backgroundColor {
+      attributes.backgroundColor = backgroundColor.opacity(opacity)
+    }
     return attributes
   }
 }

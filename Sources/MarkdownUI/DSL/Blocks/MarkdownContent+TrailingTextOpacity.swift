@@ -6,7 +6,9 @@ public extension MarkdownContent {
   ///
   /// `fadeCharacterCount` is measured in extended grapheme clusters. Markdown syntax and block
   /// separators are not counted. Fenced code and raw HTML blocks count toward the document tail but
-  /// remain unchanged. A fade character count smaller than two leaves the content unchanged.
+  /// remain unchanged. When the content is shorter than `fadeCharacterCount`, the gradient is
+  /// normalized over the available characters. A fade character count smaller than two leaves the
+  /// content unchanged.
   func applyingTrailingTextOpacity(
     fadeCharacterCount: Int,
     minimumOpacity: Double
@@ -17,7 +19,8 @@ public extension MarkdownContent {
     guard totalCount > 0 else { return self }
 
     let minimumOpacity = min(max(minimumOpacity, 0), 1)
-    let fadeStart = max(totalCount - fadeCharacterCount, 0)
+    let fadeSpanCharacterCount = min(totalCount, fadeCharacterCount)
+    let fadeStart = totalCount - fadeSpanCharacterCount
     var offset = 0
 
     let blocks = self.blocks.rewrite { (block: BlockNode) -> [BlockNode] in
@@ -31,7 +34,7 @@ public extension MarkdownContent {
               offset: &offset,
               totalCount: totalCount,
               fadeStart: fadeStart,
-              fadeCharacterCount: fadeCharacterCount,
+              fadeSpanCharacterCount: fadeSpanCharacterCount,
               minimumOpacity: minimumOpacity,
               makeNode: InlineNode.text
             )
@@ -41,16 +44,39 @@ public extension MarkdownContent {
               offset: &offset,
               totalCount: totalCount,
               fadeStart: fadeStart,
-              fadeCharacterCount: fadeCharacterCount,
+              fadeSpanCharacterCount: fadeSpanCharacterCount,
               minimumOpacity: minimumOpacity,
               makeNode: InlineNode.code
             )
           case .softBreak, .lineBreak:
-            offset += 1
-            return [inline]
+            return Self.applyingTrailingTextOpacity(
+              to: inline,
+              offset: &offset,
+              totalCount: totalCount,
+              fadeStart: fadeStart,
+              fadeSpanCharacterCount: fadeSpanCharacterCount,
+              minimumOpacity: minimumOpacity
+            )
           case .html(let content):
-            offset += content.renderedCharacterCount
-            return [inline]
+            if content.renderedCharacterCount == 1 {
+              return Self.applyingTrailingTextOpacity(
+                to: inline,
+                offset: &offset,
+                totalCount: totalCount,
+                fadeStart: fadeStart,
+                fadeSpanCharacterCount: fadeSpanCharacterCount,
+                minimumOpacity: minimumOpacity
+              )
+            }
+            return Self.applyingTrailingTextOpacity(
+              to: content,
+              offset: &offset,
+              totalCount: totalCount,
+              fadeStart: fadeStart,
+              fadeSpanCharacterCount: fadeSpanCharacterCount,
+              minimumOpacity: minimumOpacity,
+              makeNode: InlineNode.html
+            )
           default:
             return [inline]
           }
@@ -71,7 +97,7 @@ public extension MarkdownContent {
     offset: inout Int,
     totalCount: Int,
     fadeStart: Int,
-    fadeCharacterCount: Int,
+    fadeSpanCharacterCount: Int,
     minimumOpacity: Double,
     makeNode: (String) -> InlineNode
   ) -> [InlineNode] {
@@ -92,9 +118,12 @@ public extension MarkdownContent {
         opaquePrefix = ""
       }
 
-      let distanceFromEnd = totalCount - 1 - globalIndex
-      let progress = Double(distanceFromEnd) / Double(fadeCharacterCount - 1)
-      let opacity = minimumOpacity + (1 - minimumOpacity) * progress
+      let opacity = Self.trailingOpacity(
+        at: globalIndex,
+        totalCount: totalCount,
+        fadeSpanCharacterCount: fadeSpanCharacterCount,
+        minimumOpacity: minimumOpacity
+      )
       nodes.append(.opacity(opacity, children: [makeNode(String(character))]))
     }
 
@@ -103,6 +132,39 @@ public extension MarkdownContent {
     }
 
     return nodes
+  }
+
+  private static func applyingTrailingTextOpacity(
+    to inline: InlineNode,
+    offset: inout Int,
+    totalCount: Int,
+    fadeStart: Int,
+    fadeSpanCharacterCount: Int,
+    minimumOpacity: Double
+  ) -> [InlineNode] {
+    let globalIndex = offset
+    offset += 1
+
+    guard globalIndex >= fadeStart else { return [inline] }
+
+    let opacity = Self.trailingOpacity(
+      at: globalIndex,
+      totalCount: totalCount,
+      fadeSpanCharacterCount: fadeSpanCharacterCount,
+      minimumOpacity: minimumOpacity
+    )
+    return [.opacity(opacity, children: [inline])]
+  }
+
+  private static func trailingOpacity(
+    at globalIndex: Int,
+    totalCount: Int,
+    fadeSpanCharacterCount: Int,
+    minimumOpacity: Double
+  ) -> Double {
+    let distanceFromEnd = totalCount - 1 - globalIndex
+    let progress = Double(distanceFromEnd) / Double(max(fadeSpanCharacterCount - 1, 1))
+    return minimumOpacity + (1 - minimumOpacity) * progress
   }
 }
 
@@ -252,6 +314,8 @@ private extension Sequence where Element == InlineNode {
           result[result.count - 1] = .text(previous + text)
         } else if case .code(let code) = node, case .code(let previous)? = result.last {
           result[result.count - 1] = .code(previous + code)
+        } else if case .html(let html) = node, case .html(let previous)? = result.last {
+          result[result.count - 1] = .html(previous + html)
         } else {
           result.append(node)
         }
