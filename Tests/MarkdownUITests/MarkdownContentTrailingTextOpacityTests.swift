@@ -2,10 +2,10 @@
 import XCTest
 
 final class MarkdownContentTrailingTextOpacityTests: XCTestCase {
-  func testAppliesLinearOpacityToTrailingWindow() {
+  func testAppliesLinearOpacityToTrailingCharacterCount() {
     let content = MarkdownContent("0123456789")
 
-    let transformed = content.applyingTrailingTextOpacity(window: 4, minimumOpacity: 0.2)
+    let transformed = content.applyingTrailingTextOpacity(fadeCharacterCount: 4, minimumOpacity: 0.2)
 
     let runs = transformed.opacityRuns
     XCTAssertEqual(runs.map(\.text), ["6", "7", "8", "9"])
@@ -17,7 +17,7 @@ final class MarkdownContentTrailingTextOpacityTests: XCTestCase {
   func testCountsExtendedGraphemeClusters() {
     let content = MarkdownContent("A👨‍👩‍👧‍👦B")
 
-    let transformed = content.applyingTrailingTextOpacity(window: 3, minimumOpacity: 0.2)
+    let transformed = content.applyingTrailingTextOpacity(fadeCharacterCount: 3, minimumOpacity: 0.2)
 
     XCTAssertEqual(transformed.opacityRuns.map(\.text), ["A", "👨‍👩‍👧‍👦", "B"])
   }
@@ -25,7 +25,7 @@ final class MarkdownContentTrailingTextOpacityTests: XCTestCase {
   func testPreservesNestedInlineStyles() {
     let content = MarkdownContent("Start **bold** [link](https://whoop.com) `code`")
 
-    let transformed = content.applyingTrailingTextOpacity(window: 8, minimumOpacity: 0.12)
+    let transformed = content.applyingTrailingTextOpacity(fadeCharacterCount: 8, minimumOpacity: 0.12)
 
     XCTAssertEqual(transformed.renderPlainText(), content.renderPlainText())
     XCTAssertEqual(transformed.renderMarkdown(), content.renderMarkdown())
@@ -36,7 +36,7 @@ final class MarkdownContentTrailingTextOpacityTests: XCTestCase {
   func testPreservesOpaquePrefixOfInlineCode() {
     let content = MarkdownContent("Before `abcdefghij`")
 
-    let transformed = content.applyingTrailingTextOpacity(window: 2, minimumOpacity: 0.12)
+    let transformed = content.applyingTrailingTextOpacity(fadeCharacterCount: 2, minimumOpacity: 0.12)
 
     XCTAssertEqual(transformed.renderPlainText(), content.renderPlainText())
     XCTAssertEqual(transformed.renderMarkdown(), content.renderMarkdown())
@@ -45,7 +45,7 @@ final class MarkdownContentTrailingTextOpacityTests: XCTestCase {
   func testFadesOnlyTheDocumentTailAcrossBlocks() {
     let content = MarkdownContent("First paragraph.\n\nSecond paragraph.")
 
-    let transformed = content.applyingTrailingTextOpacity(window: 6, minimumOpacity: 0.2)
+    let transformed = content.applyingTrailingTextOpacity(fadeCharacterCount: 6, minimumOpacity: 0.2)
 
     XCTAssertEqual(transformed.opacityRuns.map(\.text).joined(), "graph.")
   }
@@ -53,18 +53,18 @@ final class MarkdownContentTrailingTextOpacityTests: XCTestCase {
   func testFencedCodeCountsTowardTailWithoutChangingTheBlock() {
     let content = MarkdownContent("Before\n\n```\n1234567890\n```")
 
-    let transformed = content.applyingTrailingTextOpacity(window: 8, minimumOpacity: 0.12)
+    let transformed = content.applyingTrailingTextOpacity(fadeCharacterCount: 8, minimumOpacity: 0.12)
 
     XCTAssertTrue(transformed.opacityRuns.isEmpty)
     XCTAssertEqual(transformed.renderPlainText(), content.renderPlainText())
     XCTAssertEqual(transformed.renderMarkdown(), content.renderMarkdown())
   }
 
-  func testSmallWindowLeavesContentUnchanged() {
+  func testSmallFadeCharacterCountLeavesContentUnchanged() {
     let content = MarkdownContent("Hello")
 
     XCTAssertEqual(
-      content.applyingTrailingTextOpacity(window: 1, minimumOpacity: 0.2),
+      content.applyingTrailingTextOpacity(fadeCharacterCount: 1, minimumOpacity: 0.2),
       content
     )
   }
@@ -72,8 +72,8 @@ final class MarkdownContentTrailingTextOpacityTests: XCTestCase {
   func testClampsMinimumOpacity() {
     let content = MarkdownContent("Hello")
 
-    let belowZero = content.applyingTrailingTextOpacity(window: 2, minimumOpacity: -1)
-    let aboveOne = content.applyingTrailingTextOpacity(window: 2, minimumOpacity: 2)
+    let belowZero = content.applyingTrailingTextOpacity(fadeCharacterCount: 2, minimumOpacity: -1)
+    let aboveOne = content.applyingTrailingTextOpacity(fadeCharacterCount: 2, minimumOpacity: 2)
 
     XCTAssertEqual(belowZero.opacityRuns.last?.opacity, 0)
     XCTAssertEqual(aboveOne.opacityRuns.last?.opacity, 1)

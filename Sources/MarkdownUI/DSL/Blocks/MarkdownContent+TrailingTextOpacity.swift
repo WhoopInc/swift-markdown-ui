@@ -4,20 +4,20 @@ public extension MarkdownContent {
   /// Returns content whose trailing inline text gradually transitions from `1` to
   /// `minimumOpacity`, while preserving the original Markdown structure and inline styles.
   ///
-  /// The window is measured in extended grapheme clusters. Markdown syntax and block separators
-  /// are not counted. Fenced code and raw HTML blocks count toward the document tail but remain
-  /// unchanged. A window smaller than two leaves the content unchanged.
+  /// `fadeCharacterCount` is measured in extended grapheme clusters. Markdown syntax and block
+  /// separators are not counted. Fenced code and raw HTML blocks count toward the document tail but
+  /// remain unchanged. A fade character count smaller than two leaves the content unchanged.
   func applyingTrailingTextOpacity(
-    window: Int,
+    fadeCharacterCount: Int,
     minimumOpacity: Double
   ) -> MarkdownContent {
-    guard window > 1 else { return self }
+    guard fadeCharacterCount > 1 else { return self }
 
     let totalCount = self.blocks.renderedInlineCharacterCount
     guard totalCount > 0 else { return self }
 
     let minimumOpacity = min(max(minimumOpacity, 0), 1)
-    let windowStart = max(totalCount - window, 0)
+    let fadeStart = max(totalCount - fadeCharacterCount, 0)
     var offset = 0
 
     let blocks = self.blocks.rewrite { (block: BlockNode) -> [BlockNode] in
@@ -30,8 +30,8 @@ public extension MarkdownContent {
               to: content,
               offset: &offset,
               totalCount: totalCount,
-              windowStart: windowStart,
-              window: window,
+              fadeStart: fadeStart,
+              fadeCharacterCount: fadeCharacterCount,
               minimumOpacity: minimumOpacity,
               makeNode: InlineNode.text
             )
@@ -40,8 +40,8 @@ public extension MarkdownContent {
               to: content,
               offset: &offset,
               totalCount: totalCount,
-              windowStart: windowStart,
-              window: window,
+              fadeStart: fadeStart,
+              fadeCharacterCount: fadeCharacterCount,
               minimumOpacity: minimumOpacity,
               makeNode: InlineNode.code
             )
@@ -70,8 +70,8 @@ public extension MarkdownContent {
     to content: String,
     offset: inout Int,
     totalCount: Int,
-    windowStart: Int,
-    window: Int,
+    fadeStart: Int,
+    fadeCharacterCount: Int,
     minimumOpacity: Double,
     makeNode: (String) -> InlineNode
   ) -> [InlineNode] {
@@ -82,7 +82,7 @@ public extension MarkdownContent {
       let globalIndex = offset
       offset += 1
 
-      guard globalIndex >= windowStart else {
+      guard globalIndex >= fadeStart else {
         opaquePrefix.append(character)
         continue
       }
@@ -93,7 +93,7 @@ public extension MarkdownContent {
       }
 
       let distanceFromEnd = totalCount - 1 - globalIndex
-      let progress = Double(distanceFromEnd) / Double(window - 1)
+      let progress = Double(distanceFromEnd) / Double(fadeCharacterCount - 1)
       let opacity = minimumOpacity + (1 - minimumOpacity) * progress
       nodes.append(.opacity(opacity, children: [makeNode(String(character))]))
     }
