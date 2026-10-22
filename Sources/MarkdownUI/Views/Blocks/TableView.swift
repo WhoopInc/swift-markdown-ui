@@ -417,13 +417,14 @@ extension MarkdownTableLayout {
       preferredWidths = naturalWidths
     }
 
-    let proposedWidth = fixedTableWidth ?? proposal.width
-    guard let proposedWidth else {
+    // Unconstrained placement must retain the column widths used to measure the table's height.
+    guard let proposedWidth = proposal.width else {
       return preferredWidths
     }
 
     let availableWidth =
-      proposedWidth - 2 * self.layoutBorderWidth - CGFloat(max(0, self.columnCount - 1))
+      (fixedTableWidth ?? proposedWidth) - 2 * self.layoutBorderWidth
+      - CGFloat(max(0, self.columnCount - 1))
       * self.layoutBorderWidth
     guard availableWidth > 0 else {
       return preferredWidths
