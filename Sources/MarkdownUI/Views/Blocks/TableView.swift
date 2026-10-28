@@ -714,27 +714,31 @@ extension MarkdownTableLayout {
 
 /// Controls how a Markdown table chooses its column widths.
 public struct TableLayoutWidthBehavior: Equatable {
-  enum Kind: Equatable {
-    case compact
-    case fillAvailable
-    case balancedFillAvailable(maxWidthFraction: CGFloat, widthAdjustment: CGFloat)
-  }
-
   let kind: Kind
+}
 
+extension TableLayoutWidthBehavior {
   /// Prefers compact column widths based on the table's headers.
-  public static let compact = Self(kind: .compact)
+  public static var compact: Self { .init(kind: .compact) }
 
   /// Uses natural column widths when unconstrained and fits available width otherwise.
-  public static let fillAvailable = Self(kind: .fillAvailable)
+  public static var fillAvailable: Self { .init(kind: .fillAvailable) }
 
   static func balancedFillAvailable(maxWidthFraction: CGFloat, widthAdjustment: CGFloat) -> Self {
-    Self(
+    .init(
       kind: .balancedFillAvailable(
         maxWidthFraction: maxWidthFraction,
         widthAdjustment: widthAdjustment
       )
     )
+  }
+}
+
+extension TableLayoutWidthBehavior {
+  enum Kind: Equatable {
+    case compact
+    case fillAvailable
+    case balancedFillAvailable(maxWidthFraction: CGFloat, widthAdjustment: CGFloat)
   }
 }
 
