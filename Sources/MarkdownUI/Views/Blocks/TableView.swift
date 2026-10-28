@@ -410,26 +410,27 @@ extension MarkdownTableLayout {
     let minimumWidths = self.naturalColumnWidths(cellSizes: minimumCellSizes)
     let preferredWidths: [CGFloat]
 
-    switch self.widthBehavior {
+    switch self.widthBehavior.kind {
     case .compact:
       preferredWidths = readableWidths
     case .fillAvailable, .balancedFillAvailable:
       preferredWidths = naturalWidths
     }
 
-    let proposedWidth = fixedTableWidth ?? proposal.width
-    guard let proposedWidth else {
+    // Unconstrained placement must retain the column widths used to measure the table's height.
+    guard let proposedWidth = proposal.width else {
       return preferredWidths
     }
 
     let availableWidth =
-      proposedWidth - 2 * self.layoutBorderWidth - CGFloat(max(0, self.columnCount - 1))
+      (fixedTableWidth ?? proposedWidth) - 2 * self.layoutBorderWidth
+      - CGFloat(max(0, self.columnCount - 1))
       * self.layoutBorderWidth
     guard availableWidth > 0 else {
       return preferredWidths
     }
 
-    switch self.widthBehavior {
+    switch self.widthBehavior.kind {
     case .compact:
       let compactWidth =
         fixedTableWidth == nil && availableWidth >= 300
@@ -711,16 +712,43 @@ extension MarkdownTableLayout {
   }
 }
 
-enum TableLayoutWidthBehavior {
-  case compact
-  case fillAvailable
-  case balancedFillAvailable(maxWidthFraction: CGFloat, widthAdjustment: CGFloat)
+/// Controls how a Markdown table chooses its column widths.
+public struct TableLayoutWidthBehavior: Equatable {
+  let kind: Kind
 }
 
-extension TableLayoutWidthBehavior: Equatable {}
+extension TableLayoutWidthBehavior {
+  /// Prefers compact column widths based on the table's headers.
+  public static var compact: Self { .init(kind: .compact) }
+
+  /// Uses natural column widths when unconstrained and fits available width otherwise.
+  public static var fillAvailable: Self { .init(kind: .fillAvailable) }
+
+  static func balancedFillAvailable(maxWidthFraction: CGFloat, widthAdjustment: CGFloat) -> Self {
+    .init(
+      kind: .balancedFillAvailable(
+        maxWidthFraction: maxWidthFraction,
+        widthAdjustment: widthAdjustment
+      )
+    )
+  }
+}
+
+extension TableLayoutWidthBehavior {
+  enum Kind: Equatable {
+    case compact
+    case fillAvailable
+    case balancedFillAvailable(maxWidthFraction: CGFloat, widthAdjustment: CGFloat)
+  }
+}
 
 extension View {
-  func markdownTableLayoutWidthBehavior(_ behavior: TableLayoutWidthBehavior) -> some View {
+  /// Sets the column width behavior for Markdown tables in this view.
+  ///
+  /// Apply this modifier to the table label inside a custom table block style to override
+  /// the theme's width behavior. For example, use `.fillAvailable` in a horizontal scroll
+  /// view to size columns from all cells rather than only the table's headers.
+  public func markdownTableLayoutWidthBehavior(_ behavior: TableLayoutWidthBehavior) -> some View {
     self.environment(\.tableLayoutWidthBehavior, behavior)
   }
 }
