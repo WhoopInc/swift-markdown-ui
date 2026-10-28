@@ -410,7 +410,7 @@ extension MarkdownTableLayout {
     let minimumWidths = self.naturalColumnWidths(cellSizes: minimumCellSizes)
     let preferredWidths: [CGFloat]
 
-    switch self.widthBehavior {
+    switch self.widthBehavior.kind {
     case .compact:
       preferredWidths = readableWidths
     case .fillAvailable, .balancedFillAvailable:
@@ -430,7 +430,7 @@ extension MarkdownTableLayout {
       return preferredWidths
     }
 
-    switch self.widthBehavior {
+    switch self.widthBehavior.kind {
     case .compact:
       let compactWidth =
         fixedTableWidth == nil && availableWidth >= 300
@@ -713,16 +713,30 @@ extension MarkdownTableLayout {
 }
 
 /// Controls how a Markdown table chooses its column widths.
-public enum TableLayoutWidthBehavior {
-  /// Prefers compact column widths based on the table's headers.
-  case compact
-  /// Uses natural column widths when unconstrained and fits available width otherwise.
-  case fillAvailable
-  /// Balances columns within a fraction of the available width plus an adjustment.
-  case balancedFillAvailable(maxWidthFraction: CGFloat, widthAdjustment: CGFloat)
-}
+public struct TableLayoutWidthBehavior: Equatable {
+  enum Kind: Equatable {
+    case compact
+    case fillAvailable
+    case balancedFillAvailable(maxWidthFraction: CGFloat, widthAdjustment: CGFloat)
+  }
 
-extension TableLayoutWidthBehavior: Equatable {}
+  let kind: Kind
+
+  /// Prefers compact column widths based on the table's headers.
+  public static let compact = Self(kind: .compact)
+
+  /// Uses natural column widths when unconstrained and fits available width otherwise.
+  public static let fillAvailable = Self(kind: .fillAvailable)
+
+  static func balancedFillAvailable(maxWidthFraction: CGFloat, widthAdjustment: CGFloat) -> Self {
+    Self(
+      kind: .balancedFillAvailable(
+        maxWidthFraction: maxWidthFraction,
+        widthAdjustment: widthAdjustment
+      )
+    )
+  }
+}
 
 extension View {
   /// Sets the column width behavior for Markdown tables in this view.
