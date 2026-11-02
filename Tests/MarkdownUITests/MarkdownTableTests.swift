@@ -188,5 +188,76 @@
         of: view, as: .image(perceptualPrecision: perceptualPrecision, layout: layout)
       )
     }
+
+    func testTableFillAvailableInHorizontalScrollView() throws {
+      guard #available(iOS 16.0, macOS 13.0, tvOS 16.0, watchOS 9.0, *) else {
+        throw XCTSkip("Table rendering is not available")
+      }
+
+      let view = ScrollView(.horizontal) {
+        Markdown {
+          #"""
+          | Day | Notes |
+          | --- | --- |
+          | Monday | A longer body cell on one line |
+          """#
+        }
+        .markdownBlockStyle(\.table) { configuration in
+          configuration.label
+            .fixedSize(horizontal: true, vertical: true)
+            .markdownTableLayoutWidthBehavior(.fillAvailable)
+        }
+      }
+      .padding()
+      .border(Color.accentColor)
+
+      assertSnapshot(
+        of: view, as: .image(perceptualPrecision: perceptualPrecision, layout: layout)
+      )
+    }
+
+    func testTableRemeasuredWithoutWidthConstraint() throws {
+      guard #available(iOS 16.0, macOS 13.0, tvOS 16.0, watchOS 9.0, *) else {
+        throw XCTSkip("Table rendering is not available")
+      }
+
+      let view = Markdown {
+        #"""
+        | Day | Sleep | Notes |
+        | --- | --- | --- |
+        | Oct 18 | 8 h 12 min | Well rested |
+        | Oct 19 | 7 h 30 min | Early wake |
+        | Oct 20 | 8 h 45 min | Last row |
+        """#
+      }
+      .markdownBlockStyle(\.table) { configuration in
+        RemeasuredTableLayout {
+          configuration.label.markdownTableLayoutWidthBehavior(.fillAvailable)
+        }
+      }
+      .fixedSize()
+      .padding()
+      .border(Color.accentColor)
+
+      assertSnapshot(
+        of: view, as: .image(perceptualPrecision: perceptualPrecision, layout: layout)
+      )
+    }
+  }
+
+  @available(iOS 16.0, *)
+  private struct RemeasuredTableLayout: Layout {
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+      let size = subviews[0].sizeThatFits(.unspecified)
+      _ = subviews[0].sizeThatFits(.init(width: 200, height: nil))
+      return size
+    }
+
+    func placeSubviews(
+      in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()
+    ) {
+      _ = subviews[0].sizeThatFits(.init(width: 200, height: nil))
+      subviews[0].place(at: bounds.origin, anchor: .topLeading, proposal: .unspecified)
+    }
   }
 #endif
